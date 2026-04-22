@@ -1,0 +1,177 @@
+generator client {
+    provider = "prisma-client"
+    output   = "../src/generated/prisma"
+}
+
+datasource db {
+    provider = "postgresql"
+}
+
+model User {
+    id               String            @id @default(uuid())
+    phone            String            @unique
+    username         String            @unique
+    displayName      String
+    avatarUrl        String?
+    bio              String?
+    lastSeen         DateTime?
+    isOnline         Boolean           @default(false)
+    password         String
+    createdAt        DateTime          @default(now())
+    updatedAt        DateTime          @updatedAt
+    sessions         Session[]
+    chatMemberShips  ChatMember[]
+    groupMemberShips GroupMember[]
+    SentMessages     Message[]         @relation("SentMessages")
+    messageReceipts  MessageReceipt[]
+    messageReactions MessageReaction[]
+
+    @@index([phone])
+    @@index([username])
+}
+
+model Session {
+    id           String   @id @default(uuid())
+    userId       String
+    user         User     @relation(fields: [userId], references: [id])
+    refreshToken String   @unique
+    deviceInfo   String?
+    ipAddress    String?
+    expiresAt    DateTime
+    createdAt    DateTime @default(now())
+
+    @@index([userId])
+    @@index([refreshToken])
+}
+
+model Chat {
+    id        String       @id @default(uuid())
+    type      ChatType     @default(DIRECT)
+    createdAt DateTime     @default(now())
+    updatedAt DateTime     @updatedAt
+    members   ChatMember[]
+    group     Group?
+    messages  Message[]
+
+    @@index([updatedAt])
+}
+
+model ChatMember {
+    chatId     String
+    userId     String
+    role       MemberRole @default(MEMBER)
+    joinedAt   DateTime   @default(now())
+    lastReadAt DateTime?
+    mutedUntil DateTime?
+    chat       Chat       @relation(fields: [chatId], references: [id], onDelete: Cascade)
+    user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@id([chatId, userId])
+    @@index([chatId])
+    @@index([userId])
+}
+
+model Group {
+    id           String        @id @default(uuid())
+    chatId       String        @unique
+    name         String
+    description  String?
+    avatarUrl    String?
+    inviteCode   String        @unique @default(uuid())
+    createdBy    String
+    createdAt    DateTime      @default(now())
+    chat         Chat          @relation(fields: [chatId], references: [id])
+    members GroupMember[]
+
+    @@index([inviteCode])
+}
+
+model GroupMember {
+    groupId  String
+    userId   String
+    role     MemberRole @default(MEMBER)
+    joinedAt DateTime   @default(now())
+    group    Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+    user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@id([groupId, userId])
+}
+
+model Message {
+    id        String            @id @default(uuid())
+    chatId    String
+    senderId  String
+    content   String?
+    type      MessageType       @default(TEXT)
+    mediaUrl  String?
+    mediaMeta Json?
+    replyToId String?
+    isDeleted Boolean           @default(false)
+    deletedAt DateTime?
+    createdAt DateTime          @default(now())
+    updatedAt DateTime          @updatedAt
+    chat      Chat              @relation(fields: [chatId], references: [id])
+    sender    User              @relation("SentMessages", fields: [senderId], references: [id])
+    replyTo   Message?          @relation("Replies", fields: [replyToId], references: [id])
+    replies   Message[]         @relation("Replies")
+    receipts  MessageReceipt[]
+    reactions MessageReaction[]
+
+    @@index([chatId, createdAt(sort: Desc)])
+    @@index([senderId])
+}
+
+model MessageReceipt {
+    messageId   String
+    userId      String
+    status      ReceiptStatus @default(DELIVERED)
+    deliveredAt DateTime?
+    readAt      DateTime?
+
+    message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+    user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@id([messageId, userId])
+    @@index([messageId])
+    @@index([userId, status])
+}
+
+model MessageReaction {
+    messageId String
+    userId    String
+    emoji     String
+    createdAt DateTime @default(now())
+
+    message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+    user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@id([messageId, userId])
+}
+
+enum ChatType {
+    DIRECT
+    GROUP
+}
+
+enum MemberRole {
+    MEMBER
+    ADMIN
+    OWNER
+}
+
+enum MessageType {
+    TEXT
+    IMAGE
+    VIDEO
+    AUDIO
+    DOCUMENT
+    STICKER
+    LOCATION
+    SYSTEM
+}
+
+enum ReceiptStatus {
+    SENT
+    DELIVERED
+    READ
+}
